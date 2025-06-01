@@ -1,5 +1,5 @@
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Enable logging
@@ -72,19 +72,37 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text=status_message)
 
+import os
+
 def main() -> None:
     """Start the bot."""
     # Create the Application and pass it your bot's token.
-    application = Application.builder().token("YOUR_TELEGRAM_BOT_TOKEN").build()
+    token = os.environ.get("TELEGRAM_TOKEN")
+    if not token:
+        raise ValueError("Please set the TELEGRAM_TOKEN environment variable")
+    application = Application.builder().token(token).build()
 
     # on different commands - answer in Telegram
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("complete_task", complete_task))
     application.add_handler(CommandHandler("failed_task", failed_task))
     application.add_handler(CommandHandler("status", status))
+    application.add_handler(CommandHandler("webapp", webapp_command_handler))
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling()
+
+async def webapp_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    # Make sure your Flask app is running on port 5000 locally
+    webapp_url = f'http://127.0.0.1:5000/webapp?user_id={user_id}'
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Open Tasks & Habits", url=webapp_url)]
+    ])
+    await update.message.reply_text(
+        "Click below to manage your tasks and habits:",
+        reply_markup=keyboard
+    )
 
 if __name__ == "__main__":
     main()

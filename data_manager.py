@@ -21,7 +21,7 @@ def get_user(user_id):
     users = load_user_data()
     user_id_str = str(user_id)
     if user_id_str not in users:
-        users[user_id_str] = {"health": 100, "experience": 0, "gold": 10, "tasks": {}}
+        users[user_id_str] = {"health": 100, "experience": 0, "gold": 10, "tasks": {}, "habits": {}}
         # No need to save here, as get_user is for retrieval.
         # The caller can decide to save if modifications are made.
     return users.get(user_id_str)
@@ -34,6 +34,6 @@ def update_user(user_id, user_specific_data):
     # Ensure the user exists before updating, or initialize if that's the desired behavior.
     # For now, assuming get_user or some other mechanism ensures user creation.
     if user_id_str not in users:
-        users[user_id_str] = {"health": 100, "experience": 0, "gold": 10, "tasks": {}} # Initialize if not exist
+        users[user_id_str] = {"health": 100, "experience": 0, "gold": 10, "tasks": {}, "habits": {}} # Initialize if not exist
     users[user_id_str].update(user_specific_data)
     save_user_data(users)

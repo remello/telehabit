@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Gamified Life</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        h1, h2 { margin-top: 30px; }
+        input[type="text"], textarea { margin-bottom: 10px; padding: 8px; width: calc(100% - 18px); }
+        button { padding: 8px 12px; margin-right: 5px; cursor: pointer; }
+        ul { list-style-type: none; padding-left: 0; }
+        li { background-color: #f9f9f9; border: 1px solid #eee; padding: 10px; margin-bottom: 10px; }
+        .task-item, .habit-item { display: flex; justify-content: space-between; align-items: center; }
+        .actions button { font-size: 0.8em; }
+        .completed-task { text-decoration: line-through; color: #888; }
+        #userStats div { margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <h1>User Dashboard</h1>
+
+    <div id="userStats">
+        <h2>User Stats</h2>
+        <div>Health: <span id="statHealth">N/A</span></div>
+        <div>Experience (XP): <span id="statXP">N/A</span></div>
+        <div>Gold: <span id="statGold">N/A</span></div>
+    </div>
+
+    <div id="tasksSection">
+        <h2>Tasks</h2>
+        <form id="addTaskForm">
+            <input type="text" id="taskName" placeholder="Task Name (unique)" required><br>
+            <textarea id="taskDescription" placeholder="Task Description"></textarea><br>
+            <button type="submit">Add Task</button>
+        </form>
+        <ul id="taskList"></ul>
+    </div>
+
+    <div id="habitsSection">
+        <h2>Habits</h2>
+        <form id="addHabitForm">
+            <input type="text" id="habitName" placeholder="Habit Name (unique)" required><br>
+            <input type="text" id="habitFrequency" placeholder="Frequency (e.g., daily, weekly)" value="daily"><br>
+            <textarea id="habitDescription" placeholder="Habit Description"></textarea><br>
+            <button type="submit">Add Habit</button>
+        </form>
+        <ul id="habitList"></ul>
+    </div>
+
+    <script>
+        let userId = ''; // Will be set on page load
+
+        // --- Utility Functions ---
+        function getUserIdFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('user_id');
+        }
+
+        async function fetchApi(url, options = {}) {
+            const defaultOptions = {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            };
+            const response = await fetch(url, { ...defaultOptions, ...options });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: response.statusText }));
+                throw new Error(errorData.message || `API Error: ${response.status}`);
+            }
+            return response.json();
+        }
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', () => {
+            userId = getUserIdFromUrl();
+            if (!userId) {
+                document.body.innerHTML = '<h1>Error: User ID not found in URL. Please access via /webapp?user_id=YOUR_ID</h1>';
+                return;
+            }
+            console.log("User ID:", userId);
+            loadUserData();
+            setupEventListeners();
+        });
+
+        async function loadUserData() {
+            try {
+                const data = await fetchApi(`/api/user/${userId}`);
+                console.log("User data loaded:", data);
+                renderStats(data);
+                renderTasks(data.tasks || {});
+                renderHabits(data.habits || {});
+            } catch (error) {
+                console.error('Error loading user data:', error);
+                alert(`Error loading user data: ${error.message}`);
+            }
+        }
+
+        function renderStats(userData) {
+            document.getElementById('statHealth').textContent = userData.health !== undefined ? userData.health : 'N/A';
+            document.getElementById('statXP').textContent = userData.experience !== undefined ? userData.experience : 'N/A';
+            document.getElementById('statGold').textContent = userData.gold !== undefined ? userData.gold : 'N/A';
+        }
+
+        // --- Task Management ---
+        function renderTasks(tasks) {
+            const taskList = document.getElementById('taskList');
+            taskList.innerHTML = ''; // Clear existing tasks
+
+            if (Object.keys(tasks).length === 0) {
+                taskList.innerHTML = '<li>No tasks yet.</li>';
+                return;
+            }
+
+            for (const taskId in tasks) {
+                const task = tasks[taskId];
+                const li = document.createElement('li');
+                li.className = task.completed ? 'task-item completed-task' : 'task-item';
+                li.innerHTML = `
+                    <div>
+                        <strong>${taskId}</strong><br>
+                        <small>${task.description || ''}</small>
+                    </div>
+                    <div class="actions">
+                        <button onclick="completeTask('${taskId}', ${!task.completed})">${task.completed ? 'Undo' : 'Complete'}</button>
+                        <button onclick="failTask('${taskId}')" ${task.completed ? 'disabled' : ''}>Fail</button>
+                        <button onclick="deleteTask('${taskId}')">Delete</button>
+                        <!-- Edit button can be added here -->
+                    </div>
+                `;
+                taskList.appendChild(li);
+            }
+        }
+
+        async function handleAddTask(event) {
+            event.preventDefault();
+            const taskName = document.getElementById('taskName').value;
+            const taskDescription = document.getElementById('taskDescription').value;
+
+            if (!taskName) {
+                alert('Task name is required.');
+                return;
+            }
+
+            try {
+                await fetchApi(`/api/user/${userId}/tasks`, {
+                    method: 'POST',
+                    body: JSON.stringify({ name: taskName, description: taskDescription }),
+                });
+                document.getElementById('addTaskForm').reset();
+                loadUserData(); // Reload all data to reflect changes
+            } catch (error) {
+                console.error('Error adding task:', error);
+                alert(`Error adding task: ${error.message}`);
+            }
+        }
+
+        async function completeTask(taskId, isCompleted) {
+            try {
+                await fetchApi(`/api/user/${userId}/tasks/${taskId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ completed: isCompleted }),
+                });
+                loadUserData(); // Reload to update stats and task list
+            } catch (error) {
+                console.error('Error updating task completion:', error);
+                alert(`Error updating task: ${error.message}`);
+            }
+        }
+
+        async function deleteTask(taskId) {
+            if (!confirm(`Are you sure you want to delete task: ${taskId}?`)) return;
+            try {
+                await fetchApi(`/api/user/${userId}/tasks/${taskId}`, { method: 'DELETE' });
+                loadUserData(); // Reload all data
+            } catch (error) {
+                console.error('Error deleting task:', error);
+                alert(`Error deleting task: ${error.message}`);
+            }
+        }
+
+        async function failTask(taskId) {
+            if (!confirm(`Are you sure you want to mark task "${taskId}" as failed? This may affect your health.`)) return;
+            try {
+                await fetchApi(`/api/user/${userId}/tasks/${taskId}/fail`, { method: 'POST' });
+                loadUserData(); // Reload to update stats and task list
+            } catch (error) {
+                console.error('Error failing task:', error);
+                alert(`Error failing task: ${error.message}`);
+            }
+        }
+
+        // --- Habit Management (Placeholder - to be implemented next) ---
+        function renderHabits(habits) {
+            const habitList = document.getElementById('habitList');
+            habitList.innerHTML = ''; // Clear existing habits
+
+            if (Object.keys(habits).length === 0) {
+                habitList.innerHTML = '<li>No habits yet.</li>';
+                return;
+            }
+
+            for (const habitId in habits) {
+                const habit = habits[habitId];
+                const li = document.createElement('li');
+                li.className = 'habit-item';
+                li.innerHTML = `
+                    <div>
+                        <strong>${habitId}</strong> (Streak: ${habit.streak || 0})<br>
+                        <small>${habit.description || ''} - Freq: ${habit.frequency || 'daily'}</small><br>
+                        <small>Last completed: ${habit.last_completed_date ? new Date(habit.last_completed_date).toLocaleDateString() : 'Never'}</small>
+                    </div>
+                    <div class="actions">
+                        <button onclick="completeHabit('${habitId}')">Done Today</button>
+                        <button onclick="failHabit('${habitId}')">Missed</button>
+                        <button onclick="deleteHabit('${habitId}')">Delete</button>
+                         <!-- Edit button can be added here -->
+                    </div>
+                `;
+                habitList.appendChild(li);
+            }
+        }
+
+        async function handleAddHabit(event) {
+            event.preventDefault();
+            const habitName = document.getElementById('habitName').value;
+            const habitFrequency = document.getElementById('habitFrequency').value;
+            const habitDescription = document.getElementById('habitDescription').value;
+
+            if (!habitName) {
+                alert('Habit name is required.');
+                return;
+            }
+
+            try {
+                await fetchApi(`/api/user/${userId}/habits`, {
+                    method: 'POST',
+                    body: JSON.stringify({ name: habitName, frequency: habitFrequency, description: habitDescription }),
+                });
+                document.getElementById('addHabitForm').reset();
+                loadUserData(); // Reload all data
+            } catch (error) {
+                console.error('Error adding habit:', error);
+                alert(`Error adding habit: ${error.message}`);
+            }
+        }
+
+        async function completeHabit(habitId) {
+            try {
+                await fetchApi(`/api/user/${userId}/habits/${habitId}/complete`, { method: 'POST' });
+                loadUserData();
+            } catch (error) {
+                console.error('Error completing habit:', error);
+                alert(`Error completing habit: ${error.message}`);
+            }
+        }
+
+        async function failHabit(habitId) {
+            try {
+                await fetchApi(`/api/user/${userId}/habits/${habitId}/fail`, { method: 'POST' });
+                loadUserData();
+            } catch (error) {
+                console.error('Error failing habit:', error);
+                alert(`Error failing habit: ${error.message}`);
+            }
+        }
+
+        async function deleteHabit(habitId) {
+            if (!confirm(`Are you sure you want to delete habit: ${habitId}?`)) return;
+            try {
+                await fetchApi(`/api/user/${userId}/habits/${habitId}`, { method: 'DELETE' });
+                loadUserData(); // Reload all data
+            } catch (error) {
+                console.error('Error deleting habit:', error);
+                alert(`Error deleting habit: ${error.message}`);
+            }
+        }
+
+        // --- Habit Editing Modal Functionality ---
+        const editHabitModal = document.getElementById('editHabitModal');
+        const editHabitIdNameInput = document.getElementById('editHabitIdName');
+        const editHabitDescriptionInput = document.getElementById('editHabitDescription');
+        const editHabitFrequencyInput = document.getElementById('editHabitFrequency');
+        const saveHabitButton = document.getElementById('saveHabitButton');
+        const cancelEditHabitButton = document.getElementById('cancelEditHabitButton');
+        let currentEditHabitId = null;
+
+        function openEditHabitModal(habitId, currentName, currentDescription, currentFrequency) {
+            currentEditHabitId = habitId;
+            editHabitIdNameInput.value = `Habit ID: ${habitId} (Name: ${currentName})`;
+            editHabitDescriptionInput.value = currentDescription;
+            editHabitFrequencyInput.value = currentFrequency;
+            editHabitModal.style.display = 'block';
+        }
+
+        function closeEditHabitModal() {
+            editHabitModal.style.display = 'none';
+            currentEditHabitId = null;
+            editHabitDescriptionInput.value = '';
+            editHabitFrequencyInput.value = '';
+        }
+
+        cancelEditHabitButton.onclick = closeEditHabitModal;
+
+        saveHabitButton.onclick = function() {
+            if (currentEditHabitId) {
+                const newDescription = editHabitDescriptionInput.value;
+                const newFrequency = editHabitFrequencyInput.value;
+                if (!newFrequency) {
+                    alert('Frequency is required for a habit.');
+                    return;
+                }
+                handleEditHabit(currentEditHabitId, newDescription, newFrequency);
+            }
+        };
+
+        async function handleEditHabit(habitId, newDescription, newFrequency) {
+            if (!userId) {
+                alert('User ID not found. Cannot edit habit.');
+                return;
+            }
+
+            try {
+                await fetchApi(`/api/user/${userId}/habits/${habitId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ description: newDescription, frequency: newFrequency }),
+                });
+                closeEditHabitModal();
+                loadUserData(); // Reload data to show the updated habit
+            } catch (error) {
+                console.error('Error updating habit:', error);
+                alert(`Error updating habit: ${error.message}`);
+            }
+        }
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+            document.getElementById('addTaskForm').addEventListener('submit', handleAddTask);
+            document.getElementById('addHabitForm').addEventListener('submit', handleAddHabit);
+            // Event listeners for edit buttons would be more complex, possibly involving modals
+            // or inline editing, and are deferred for now.
+        }
+
+    </script>
+</body>
+</html>
