@@ -274,6 +274,63 @@
             }
         }
 
+        // --- Habit Editing Modal Functionality ---
+        const editHabitModal = document.getElementById('editHabitModal');
+        const editHabitIdNameInput = document.getElementById('editHabitIdName');
+        const editHabitDescriptionInput = document.getElementById('editHabitDescription');
+        const editHabitFrequencyInput = document.getElementById('editHabitFrequency');
+        const saveHabitButton = document.getElementById('saveHabitButton');
+        const cancelEditHabitButton = document.getElementById('cancelEditHabitButton');
+        let currentEditHabitId = null;
+
+        function openEditHabitModal(habitId, currentName, currentDescription, currentFrequency) {
+            currentEditHabitId = habitId;
+            editHabitIdNameInput.value = `Habit ID: ${habitId} (Name: ${currentName})`;
+            editHabitDescriptionInput.value = currentDescription;
+            editHabitFrequencyInput.value = currentFrequency;
+            editHabitModal.style.display = 'block';
+        }
+
+        function closeEditHabitModal() {
+            editHabitModal.style.display = 'none';
+            currentEditHabitId = null;
+            editHabitDescriptionInput.value = '';
+            editHabitFrequencyInput.value = '';
+        }
+
+        cancelEditHabitButton.onclick = closeEditHabitModal;
+
+        saveHabitButton.onclick = function() {
+            if (currentEditHabitId) {
+                const newDescription = editHabitDescriptionInput.value;
+                const newFrequency = editHabitFrequencyInput.value;
+                if (!newFrequency) {
+                    alert('Frequency is required for a habit.');
+                    return;
+                }
+                handleEditHabit(currentEditHabitId, newDescription, newFrequency);
+            }
+        };
+
+        async function handleEditHabit(habitId, newDescription, newFrequency) {
+            if (!userId) {
+                alert('User ID not found. Cannot edit habit.');
+                return;
+            }
+
+            try {
+                await fetchApi(`/api/user/${userId}/habits/${habitId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ description: newDescription, frequency: newFrequency }),
+                });
+                closeEditHabitModal();
+                loadUserData(); // Reload data to show the updated habit
+            } catch (error) {
+                console.error('Error updating habit:', error);
+                alert(`Error updating habit: ${error.message}`);
+            }
+        }
+
         // --- Event Listeners Setup ---
         function setupEventListeners() {
             document.getElementById('addTaskForm').addEventListener('submit', handleAddTask);
